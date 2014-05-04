@@ -14,7 +14,7 @@
 				overflow: hidden;
 			}
 
-			#info {
+			#videoSelect {
 				color: #ffffff;
 
 				font-family: Monospace;
@@ -27,6 +27,13 @@
 				padding: 5px;
 			}
 
+			video {
+				position: absolute;
+				bottom: 0px; left: 0px;
+				width: 20%;
+				height: 20%;
+			}
+
 			a {
 
 				color: #0040ff;
@@ -35,7 +42,9 @@
 		</style>
 	</head>
 	<body>
-
+		<div class='select' id='videoSelect'>
+		  <label for='videoSource'>Video source: </label><select id='videoSource'></select>
+		</div>
 		<script src="../build/three.min.js"></script>
 
 		<script src='js/libs/dat.gui.min.js'></script>
@@ -105,14 +114,20 @@
 			var scene, camera, light, renderer;
 			var geometry, cube, mesh, material;
 			var mouse, center;
-			var stats;
+			var stats, gui;
+			var intervalId, animationId;
 
 			var video, texture;
+			var stream;
+
+			var videoSelect = document.querySelector("select#videoSource");
+
+			navigator.getUserMedia = navigator.getUserMedia ||
+  				navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 
 			if ( Detector.webgl ) {
 
-				init();
-				animate();
+				start();
 
 			} else {
 
@@ -120,20 +135,69 @@
 
 			}
 
-			function init() {
+			function gotSources(sourceInfos) {
+			  for (var i = 0; i != sourceInfos.length; ++i) {
+			    var sourceInfo = sourceInfos[i];
+			    var option = document.createElement("option");
+			    option.value = sourceInfo.id;
+			    if (sourceInfo.kind === 'audio') {
+			      console.log('Not use microphone.');
+			    } else if (sourceInfo.kind === 'video') {
+			      option.text = sourceInfo.label || 'camera ' + (videoSelect.length + 1);
+			      videoSelect.appendChild(option);
+			    } else {
+			      console.log('Some other kind of source: ', sourceInfo);
+			    }
+			  }
+			}
+
+			if (typeof MediaStreamTrack === 'undefined'){
+			  alert('This browser does not support MediaStreamTrack.\n\nTry Chrome Canary.');
+			} else {
+			  MediaStreamTrack.getSources(gotSources);
+			}
+
+
+			function successCallback(stream) {
+			  window.stream = stream; // make stream available to console
+			  init(stream);
+			  animate();
+			}
+
+			function errorCallback(error){
+			  console.log("navigator.getUserMedia error: ", error);
+			}
+
+			function start(){
+			  if (!!window.stream) {
+				video.src = null;
+				window.stream.stop();
+				clearInterval(intervalId);
+				cancelAnimationFrame(animationId);
+				document.body.removeChild(container);
+				document.body.removeChild(video);
+				document.body.removeChild(gui.domElement);
+			  }
+			  var videoSource = videoSelect.value;
+			  var constraints = {
+			    video: {
+			      optional: [{sourceId: videoSource}]
+			    }
+			  };
+			  navigator.getUserMedia(constraints, successCallback, errorCallback);
+			}
+
+			videoSelect.onchange = start;
+
+			function init(stream) {
 
 				container = document.createElement( 'div' );
 				document.body.appendChild( container );
 
-				var info = document.createElement( 'div' );
-				info.id = 'info';
-				info.innerHTML = '<a href="http://threejs.org" target="_blank">three.js</a> - kinect';
-				document.body.appendChild( info );
-
 				stats = new Stats();
 				stats.domElement.style.position = 'absolute';
 				stats.domElement.style.top = '0px';
-				// container.appendChild( stats.domElement );
+				container.appendChild( stats.domElement );
 
 				camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 10000 );
 				camera.position.set( 0, 0, 500 );
@@ -188,7 +252,7 @@
 					mesh.position.y = 0;
 					scene.add( mesh );
 
-					setInterval( function () {
+					intervalId = setInterval( function () {
 
 						if ( video.readyState === video.HAVE_ENOUGH_DATA ) {
 
@@ -199,7 +263,11 @@
 					}, 1000 / 30 );
 
 
-					var gui = new dat.GUI();
+					gui = new dat.GUI({autoPlace: false});
+					document.body.appendChild(gui.domElement);
+					gui.domElement.style.position = "absolute";
+					gui.domElement.style.top = "0px";
+					gui.domElement.style.right = "5px";
 					gui.add( material.uniforms.nearClipping, 'value', 1, 10000, 1.0 ).name( 'nearClipping' );
 					gui.add( material.uniforms.farClipping, 'value', 1, 10000, 1.0 ).name( 'farClipping' );
 					gui.add( material.uniforms.pointSize, 'value', 1, 10, 1.0 ).name( 'pointSize' );
@@ -209,8 +277,9 @@
 
 				}, false );
 				video.loop = true;
-				video.src = 'textures/kinect.webm';
+				video.src = window.URL.createObjectURL(stream);
 				video.play();
+				document.body.appendChild(video);
 
 				renderer = new THREE.WebGLRenderer();
 				renderer.setSize( window.innerWidth, window.innerHeight );
@@ -244,7 +313,7 @@
 
 			function animate() {
 
-				requestAnimationFrame( animate );
+				animationId = requestAnimationFrame( animate );
 
 				render();
 				stats.update();
