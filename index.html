@@ -77,7 +77,9 @@
 
 				// Projection code by @kcmic
 
-				float z = ( 1.0 - depth ) * (farClipping - nearClipping) + nearClipping;
+				// The algorithm is based on equation (5) in paper:
+				// http://iphome.hhi.de/wiegand/assets/pdfs/3d-video-depth-maps.pdf
+				float z = 1.0 / (depth * (1.0 / nearClipping - 1.0 / farClipping) + 1.0 / farClipping);
 
 				vec4 pos = vec4(
 					( position.x / width - 0.5 ) * z * XtoZ,
