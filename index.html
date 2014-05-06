@@ -64,6 +64,7 @@
 			uniform float zOffset;
 
 			varying vec2 vUv;
+			varying float depth;
 
 			const float XtoZ = 1.11146; // tan( 1.0144686 / 2.0 ) * 2.0;
 			const float YtoZ = 0.83359; // tan( 0.7898090 / 2.0 ) * 2.0;
@@ -73,13 +74,14 @@
 				vUv = vec2( position.x / width, position.y / height );
 
 				vec4 color = texture2D( map, vUv );
-				float depth = ( color.r + color.g + color.b ) / 3.0;
+
+				// Get the Y component from RGB.
+				// It is based on http://en.wikipedia.org/wiki/YUV
+				depth = 0.299 * color.r + 0.587* color.g + 0.114 * color.b;
 
 				// Projection code by @kcmic
 
-				// The algorithm is based on equation (5) in paper:
-				// http://iphome.hhi.de/wiegand/assets/pdfs/3d-video-depth-maps.pdf
-				float z = 1.0 / (depth * (1.0 / nearClipping - 1.0 / farClipping) + 1.0 / farClipping);
+				float z = depth * (farClipping - nearClipping) + nearClipping;
 
 				vec4 pos = vec4(
 					( position.x / width - 0.5 ) * z * XtoZ,
@@ -99,11 +101,14 @@
 			uniform sampler2D map;
 
 			varying vec2 vUv;
+			varying float depth;
 
 			void main() {
-
 				vec4 color = texture2D( map, vUv );
-				gl_FragColor = vec4( color.r, color.g, color.b, smoothstep( 8000.0, -8000.0, gl_FragCoord.z / gl_FragCoord.w ) );
+				if (depth > 0.99)
+					discard;
+
+				gl_FragColor = vec4( 0.5, 0.5, 0.5, 0.5 );
 
 			}
 
@@ -239,7 +244,7 @@
 							"farClipping": { type: "f", value: farClipping },
 
 							"pointSize": { type: "f", value: 2 },
-							"zOffset": { type: "f", value: 1000 }
+							"zOffset": { type: "f", value: 300 }
 
 						},
 						vertexShader: document.getElementById( 'vs' ).textContent,
