@@ -69,6 +69,40 @@
 
 			const float XtoZ = 1.11146; // tan( 1.0144686 / 2.0 ) * 2.0;
 			const float YtoZ = 0.83359; // tan( 0.7898090 / 2.0 ) * 2.0;
+			const float max = 3000.;
+			const float min = 150.;
+			const float np = 512.;
+			const float w = max;
+
+			// Implement the depth decode scheme proposed in paper
+			// "Adapting Standard Video Codecs for Depth Streaming"
+			float decodeAdaptiveDepth(vec4 rgba) {
+				float L = rgba.b;
+				float Ha = rgba.g;
+				float Hb = rgba.r;
+				float p = np / w;
+
+				float m = mod(floor( 4. * L / p - 0.5 ), 4.);
+				float q;
+				if (m == 0.) {
+					q = p / 2. * Ha;
+				} else if (m == 1.) {
+					q = p / 2. * Hb;
+				} else if (m == 2.) {
+					q = p / 2. * (1. - Ha);
+				} else if (m == 3.) {
+					q = p / 2. * (1. - Hb);
+				}
+
+				float l = L - (mod(L - p / 8., p)) + p / 4. * m - p / 8.;
+
+				float d = w * (l + q);
+				if (d < min)
+					return 1.0;
+				else
+					return (l + q);
+				return 1.0;
+			}
 
 			void main() {
 
@@ -76,9 +110,7 @@
 
 				vec4 color = texture2D( map, vUv );
 
-				// Get the Y component from RGB.
-				// It is based on http://en.wikipedia.org/wiki/YUV
-				depth = 0.299 * color.r + 0.587* color.g + 0.114 * color.b;
+				depth = decodeAdaptiveDepth(color);
 
 				// Projection code by @kcmic
 
@@ -131,7 +163,7 @@
 			var videoSelect = document.querySelector("select#videoSource");
 
 			navigator.getUserMedia = navigator.getUserMedia ||
-  				navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+				navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 
 			if ( Detector.webgl ) {
 
@@ -145,17 +177,17 @@
 
 			function gotSources(sourceInfos) {
 			  for (var i = 0; i != sourceInfos.length; ++i) {
-			    var sourceInfo = sourceInfos[i];
-			    var option = document.createElement("option");
-			    option.value = sourceInfo.id;
-			    if (sourceInfo.kind === 'audio') {
-			      console.log('Not use microphone.');
-			    } else if (sourceInfo.kind === 'video') {
-			      option.text = sourceInfo.label || 'camera ' + (videoSelect.length + 1);
-			      videoSelect.appendChild(option);
-			    } else {
-			      console.log('Some other kind of source: ', sourceInfo);
-			    }
+				var sourceInfo = sourceInfos[i];
+				var option = document.createElement("option");
+				option.value = sourceInfo.id;
+				if (sourceInfo.kind === 'audio') {
+				  console.log('Not use microphone.');
+				} else if (sourceInfo.kind === 'video') {
+				  option.text = sourceInfo.label || 'camera ' + (videoSelect.length + 1);
+				  videoSelect.appendChild(option);
+				} else {
+				  console.log('Some other kind of source: ', sourceInfo);
+				}
 			  }
 			}
 
@@ -188,10 +220,11 @@
 			  }
 			  var videoSource = videoSelect.value;
 			  var constraints = {
-			    video: {
-			      optional: [{sourceId: videoSource}]
-			    }
+				video: {
+				  optional: [{sourceId: videoSource}]
+				}
 			  };
+			  constraints = {video: { "mandatory": { "depth": true}}};
 			  navigator.getUserMedia(constraints, successCallback, errorCallback);
 			}
 
